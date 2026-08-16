@@ -1,0 +1,40 @@
+# Node & Vite Dependencies & Build Output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+*.log
+
+# Environment Files & Secrets
+.env
+.env.*
+!.env.example
+*.env
+
+# Python Virtual Environment & Bytecode
+venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+**/.pytest_cache/
+
+# ML Large Datasets & Models (Phases 3 & 4)
+backend/ml/data/raw/*
+!backend/ml/data/raw/.gitkeep
+backend/ml/data/processed/*
+!backend/ml/data/processed/.gitkeep
+backend/ml/data/metadata/*
+!backend/ml/data/metadata/.gitkeep
+backend/ml/models/*
+!backend/ml/models/.gitkeep
+
+# IDE & OS Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
