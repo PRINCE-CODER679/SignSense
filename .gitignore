@@ -32,6 +32,7 @@ backend/ml/data/metadata/*
 !backend/ml/data/metadata/.gitkeep
 backend/ml/models/*
 !backend/ml/models/.gitkeep
+!backend/ml/models/*.joblib
 
 # IDE & OS Files
 .DS_Store
