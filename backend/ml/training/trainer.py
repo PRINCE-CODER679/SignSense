@@ -189,7 +189,7 @@ class ClassifierTrainer:
 
             # 2. 5-Fold Stratified Cross-Validation
             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=self.random_state)
-            cv_scores = cross_val_score(model, X_tr, y_train, cv=skf, scoring="accuracy", n_jobs=-1)
+            cv_scores = cross_val_score(model, X_tr, y_train, cv=skf, scoring="accuracy", n_jobs=1)
             cv_mean = float(np.mean(cv_scores))
             cv_std = float(np.std(cv_scores))
 

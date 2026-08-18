@@ -20,7 +20,7 @@ import {
 import { useMediaPipeHands } from '../hooks/useMediaPipeHands';
 import { drawNeonHandLandmarks } from '../utils/handDrawer';
 import { predictLandmarks } from '../services/api';
-import { classifyASLGeometry } from '../utils/aslGeometry';
+import { classifyASLGeometry, ZTrajectoryTracker } from '../utils/aslGeometry';
 
 export default function Recognition() {
   const {
@@ -44,12 +44,13 @@ export default function Recognition() {
   } = useMediaPipeHands();
 
   const [inspectorLandmarks, setInspectorLandmarks] = useState(null);
-  const [selectedClassifier, setSelectedClassifier] = useState('deterministic_geometry');
+  const [selectedClassifier, setSelectedClassifier] = useState('logistic_regression');
   const [predictionResult, setPredictionResult] = useState(null);
   const [isInferring, setIsInferring] = useState(false);
 
   const prevPredictedLetterRef = useRef(null);
   const letterBadgeRef = useRef(null);
+  const zTrackerRef = useRef(new ZTrajectoryTracker(20));
 
   // Entrance animation for page panels
   useEffect(() => {
@@ -114,7 +115,9 @@ export default function Recognition() {
     return () => cancelAnimationFrame(animId);
   }, [videoRef, canvasRef, landmarksRef, showSkeletonOverlay, isMirrored]);
 
-  // Real-time ML Prediction Inference Loop (throttled to 10Hz)
+  // Real-time ML Prediction Inference Loop (throttled to 10Hz) with Temporal Smoothing
+  const recentPredictionsRef = useRef([]);
+
   useEffect(() => {
     let isSubscribed = true;
 
@@ -122,19 +125,58 @@ export default function Recognition() {
       if (landmarksRef.current && cameraState === 'ONLINE') {
         setIsInferring(true);
         let res = null;
-        if (selectedClassifier === 'deterministic_geometry') {
+
+        // Check dynamic Z trajectory motion ONLY if dynamic_z classifier mode is explicitly selected
+        const isZTracing = (selectedClassifier === 'dynamic_z') && zTrackerRef.current.addFrame(landmarksRef.current);
+        if (isZTracing) {
+          res = {
+            predicted_letter: 'Z',
+            confidence: 0.99,
+            classifier_used: selectedClassifier,
+            top_probabilities: [
+              { label: 'Z', confidence: 0.99 },
+              { label: 'D', confidence: 0.01 }
+            ],
+            processing_time_ms: 1.0
+          };
+        } else if (selectedClassifier === 'deterministic_geometry') {
           res = classifyASLGeometry(landmarksRef.current, handednessRef.current);
         } else {
           res = await predictLandmarks(landmarksRef.current, selectedClassifier, handednessRef.current);
+          if (!res) {
+            res = classifyASLGeometry(landmarksRef.current, handednessRef.current);
+          }
         }
+
         if (isSubscribed && res) {
-          setPredictionResult(res);
+          // Temporal smoothing window (size 5)
+          recentPredictionsRef.current.push(res);
+          if (recentPredictionsRef.current.length > 5) {
+            recentPredictionsRef.current.shift();
+          }
+
+          // Majority vote over window to prevent single-frame flickering
+          const letterCounts = {};
+          let maxCount = 0;
+          let smoothedResult = res;
+
+          for (const item of recentPredictionsRef.current) {
+            const letter = item.predicted_letter;
+            letterCounts[letter] = (letterCounts[letter] || 0) + 1;
+            if (letterCounts[letter] > maxCount) {
+              maxCount = letterCounts[letter];
+              smoothedResult = item;
+            }
+          }
+
+          setPredictionResult(smoothedResult);
         }
         if (isSubscribed) setIsInferring(false);
       } else if (!landmarksRef.current && predictionResult) {
+        recentPredictionsRef.current = [];
         setPredictionResult(null);
       }
-    }, 120);
+    }, 100);
 
     return () => {
       isSubscribed = false;

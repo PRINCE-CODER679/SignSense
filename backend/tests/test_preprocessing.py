@@ -30,12 +30,12 @@ from ml.preprocessing.extractor import LandmarkExtractor
 from ml.config import CLASSES, FEATURE_DIM, FEATURE_COLUMNS, LABEL_COLUMN
 
 
-def test_21_landmarks_produce_63_features():
-    """Verify that 21 3D landmarks produce a 63-element feature vector."""
+def test_21_landmarks_produce_full_features():
+    """Verify that 21 3D landmarks produce exact feature dimension vector."""
     # Synthetic 21 landmark tuples
     mock_landmarks = [(float(i), float(i * 2), float(i * 3)) for i in range(21)]
     features = normalize_landmarks(mock_landmarks)
-    assert len(features) == 63
+    assert len(features) == FEATURE_DIM
     assert isinstance(features, list)
 
 
@@ -61,8 +61,8 @@ def test_euclidean_scale_normalization():
 
     features = normalize_landmarks(mock_landmarks)
 
-    # Reshape features to 21x3
-    coords_2d = np.array(features).reshape(21, 3)
+    # Reshape raw 63 coordinate features to 21x3
+    coords_2d = np.array(features[:63]).reshape(21, 3)
     distances = np.linalg.norm(coords_2d, axis=1)
 
     assert np.isclose(np.max(distances), 1.0, atol=1e-6)
@@ -86,7 +86,7 @@ def test_zero_scale_edge_case():
     mock_landmarks = [(10.0, 20.0, 30.0)] * 21
     features = normalize_landmarks(mock_landmarks)
 
-    assert len(features) == 63
+    assert len(features) == FEATURE_DIM
     arr = np.array(features)
     assert not np.isnan(arr).any()
     assert np.allclose(arr, 0.0)
@@ -101,7 +101,7 @@ def test_invalid_landmark_shape_rejected():
 
 def test_label_validation_restricts_to_az():
     """Verify label validation allows only A-Z and rejects invalid characters."""
-    mock_vec = [0.1] * 63
+    mock_vec = [0.1] * FEATURE_DIM
 
     # Valid labels A-Z
     for char in ["A", "M", "Z"]:

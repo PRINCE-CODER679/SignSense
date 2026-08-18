@@ -325,58 +325,72 @@ def build_base_hand_skeleton(letter: str, variant: int = 0) -> np.ndarray:
     return np.array(landmarks, dtype=np.float64)
 
 
-def generate_samples_for_class(letter: str, n_samples: int = 100) -> List[List[float]]:
+def generate_samples_for_class(letter: str, n_samples: int = 1000) -> List[List[float]]:
     """
-    Generates n_samples normalized 63D feature vectors for a given letter class,
-    applying realistic 3D spatial augmentations (rotations, distance scaling, joint noise).
+    Generates n_samples normalized 112D feature vectors for a given letter class,
+    applying realistic 3D spatial augmentations (rotations, hand aspect ratios, distance scaling, joint noise).
     """
-    samples_63d: List[List[float]] = []
-    half_samples = n_samples // 2
+    samples_112d: List[List[float]] = []
 
     for i in range(n_samples):
-        base_coords = build_base_hand_skeleton(letter, variant=i % 3)
+        base_coords = build_base_hand_skeleton(letter, variant=i % 4)
         coords = base_coords.copy()
-        
-        # 1. Random 3D Rotation (yaw ±15 deg, pitch ±15 deg, roll ±15 deg)
-        yaw = math.radians(random.uniform(-15.0, 15.0))
-        pitch = math.radians(random.uniform(-15.0, 15.0))
-        roll = math.radians(random.uniform(-15.0, 15.0))
-        
+
+        # 1. Random 3D Rotation (yaw ±35 deg, pitch ±35 deg, roll ±45 deg)
+        yaw = math.radians(random.uniform(-35.0, 35.0))
+        pitch = math.radians(random.uniform(-35.0, 35.0))
+        roll = math.radians(random.uniform(-45.0, 45.0))
+
         # Center at wrist before rotation
         wrist = coords[0].copy()
         coords_centered = coords - wrist
+
+        # 2. Hand Aspect Ratio Variation (slender vs wide hands)
+        aspect_x = random.uniform(0.85, 1.15)
+        aspect_y = random.uniform(0.85, 1.15)
+        aspect_z = random.uniform(0.85, 1.15)
+        coords_centered[:, 0] *= aspect_x
+        coords_centered[:, 1] *= aspect_y
+        coords_centered[:, 2] *= aspect_z
+
         coords_rotated = rotate_3d(coords_centered, yaw, pitch, roll)
-        
-        # 2. Camera distance scaling (hand size variation: 0.85x to 1.15x)
-        scale = random.uniform(0.85, 1.15)
+
+        # 3. Camera distance scaling (hand size / distance variation: 0.70x to 1.35x)
+        scale = random.uniform(0.70, 1.35)
         coords_scaled = coords_rotated * scale
-        
-        # 3. Add random camera translation offset
-        trans_x = random.uniform(-0.10, 0.10)
-        trans_y = random.uniform(-0.10, 0.10)
-        trans_z = random.uniform(-0.05, 0.05)
+
+        # 4. Add random camera translation offset
+        trans_x = random.uniform(-0.15, 0.15)
+        trans_y = random.uniform(-0.15, 0.15)
+        trans_z = random.uniform(-0.08, 0.08)
         coords_world = coords_scaled + wrist + np.array([trans_x, trans_y, trans_z])
-        
-        # 4. Add subtle joint anatomical noise (Gaussian jitter σ = 0.002)
-        noise = np.random.normal(0.0, 0.002, coords_world.shape)
+
+        # 5. Add realistic joint anatomical noise (Gaussian jitter σ = 0.004)
+        noise = np.random.normal(0.0, 0.004, coords_world.shape)
         # Keep wrist noise smaller
         noise[0] *= 0.2
         coords_final = coords_world + noise
-        
-        # 5. Apply exact project normalization pipeline -> 63D vector (canonical Right hand)
-        feat_63 = normalize_landmarks(coords_final.tolist(), handedness="Right")
-        samples_63d.append(feat_63)
 
-    return samples_63d
+        # 6. Handedness Variation (50% Right hand, 50% Left hand with normalization)
+        handedness = "Left" if (i % 2 == 1) else "Right"
+        if handedness == "Left":
+            # Mirror horizontally for left hand raw input
+            coords_final[:, 0] = -coords_final[:, 0]
+
+        # 7. Apply project normalization pipeline -> 112D vector
+        feat_112 = normalize_landmarks(coords_final.tolist(), handedness=handedness)
+        samples_112d.append(feat_112)
+
+    return samples_112d
 
 
-def generate_full_dataset(samples_per_class: int = 200):
+def generate_full_dataset(samples_per_class: int = 1000):
     """
-    Builds and exports a clean canonical ASL landmark dataset (26 classes x 200 samples = 5,200 samples)
+    Builds and exports a clean canonical ASL landmark dataset (26 classes x 1000 samples = 26,000 samples)
     to PROCESSED_CSV_PATH ('backend/ml/data/processed/asl_features.csv').
     """
     print(f"\nBuilding realistic canonical ASL landmark dataset ({samples_per_class} samples/class x 26 classes = {samples_per_class * 26} total samples)...")
-    
+
     rows = []
     for letter in CLASSES:
         feats_list = generate_samples_for_class(letter, n_samples=samples_per_class)
@@ -385,19 +399,20 @@ def generate_full_dataset(samples_per_class: int = 200):
             for col, val in zip(FEATURE_COLUMNS, vec):
                 row_dict[col] = float(val)
             rows.append(row_dict)
-            
+
     df = pd.DataFrame(rows)
-    # Reorder columns: label, x0, y0, z0, ..., x20, y20, z20
+    # Reorder columns: label, x0, y0, z0, ..., spread_r_p
     df = df[[LABEL_COLUMN] + FEATURE_COLUMNS]
-    
+
     PROCESSED_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(PROCESSED_CSV_PATH, index=False)
-    
-    print(f"Successfully generated clean bilateral dataset at '{PROCESSED_CSV_PATH}'.")
+
+    print(f"Successfully generated augmented dataset at '{PROCESSED_CSV_PATH}'.")
     print(f"Total samples: {len(df):,} | Classes: {len(CLASSES)} | Features per sample: {len(FEATURE_COLUMNS)}")
     print(f"Class distribution:\n{df[LABEL_COLUMN].value_counts().to_dict()}\n")
 
 
 if __name__ == "__main__":
-    generate_full_dataset(samples_per_class=200)
+    generate_full_dataset(samples_per_class=1000)
+
 

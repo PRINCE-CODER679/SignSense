@@ -26,7 +26,7 @@ export default function Practice() {
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [feedback, setFeedback] = useState(null); // { type: 'success' | 'attempt', text: string }
-  const [selectedClassifier, setSelectedClassifier] = useState('deterministic_geometry');
+  const [selectedClassifier, setSelectedClassifier] = useState('logistic_regression');
 
   const flashcardRef = useRef(null);
   const aslAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -51,16 +51,16 @@ export default function Practice() {
     startCamera();
   }, [startCamera]);
 
-  // Anime.js flashcard entrance animation on target letter change
+  // Reset target letter when selection changes
   useEffect(() => {
+    setFeedback(null);
     if (flashcardRef.current) {
       anime({
         targets: flashcardRef.current,
-        rotateY: [-90, 0],
         scale: [0.9, 1],
-        opacity: [0, 1],
-        duration: 500,
-        easing: 'easeOutBack'
+        opacity: [0.7, 1],
+        duration: 300,
+        easing: 'easeOutExpo'
       });
     }
   }, [selectedTargetLetter]);
@@ -76,6 +76,9 @@ export default function Practice() {
           result = classifyASLGeometry(landmarksRef.current, handednessRef.current);
         } else {
           result = await predictLandmarks(landmarksRef.current, selectedClassifier, handednessRef.current);
+          if (!result) {
+            result = classifyASLGeometry(landmarksRef.current, handednessRef.current);
+          }
         }
         if (!isSubscribed) return;
 

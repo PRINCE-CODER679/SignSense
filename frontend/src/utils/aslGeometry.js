@@ -150,24 +150,24 @@ export function classifyASLGeometry(rawLandmarks, handedness = 'Right') {
   // 3. Compute Structural Match Scores for All 26 ASL Letters (0.0 to 1.0)
   const scores = {};
 
-  // 'A': All 4 fingers curled into fist; Thumb upright along side of Index MCP (LM 5)
-  scores['A'] = (indexCurled && middleCurled && ringCurled && pinkyCurled && nDist(4, 5) < 0.55 && lm[4].y < lm[6].y) ? 0.98 : 0.05;
+  // 'A': Fist with Thumb upright beside Index MCP (lm[4].y <= lm[6].y + 0.03)
+  scores['A'] = (indexCurled && middleCurled && ringCurled && pinkyCurled && lm[4].y <= lm[6].y + 0.03 && lm[4].x < lm[9].x) ? 0.98 : 0.04;
 
   // 'B': 4 fingers extended & touching; Thumb folded across palm
   scores['B'] = (indexExt && middleExt && ringExt && pinkyExt && dIndexMiddle < 0.35 && dMiddleRing < 0.35 && dRingPinky < 0.35 && (dThumbMiddle < 0.55 || !thumbExt)) ? 0.99 : 0.02;
 
-  // 'C': Curved fingers forming open "C" arc (gap between thumb & index tip 0.38 - 0.85)
-  const cGapScore = smoothstep(0.36, 0.45, dThumbIndex) * smoothstepDown(0.78, 0.88, dThumbIndex);
-  scores['C'] = (!indexExt && !pinkyExt && cGapScore > 0.1 && Math.abs(lm[8].y - lm[4].y) < 0.65)
-    ? 0.94 * cGapScore + 0.05
-    : 0.03;
+  // 'C': Curved fingers forming open "C" arc (gap between thumb & index tip 0.50 to 1.35, dThumbMiddle >= 0.45)
+  const gapRatioOC = dThumbIndex / (nDist(5, 8) || 1.0);
+  const isBPalm = indexExt && middleExt && ringExt && pinkyExt && dIndexMiddle < 0.35 && dWristMiddle > 1.65;
+  const isCArch = !isBPalm && dThumbIndex >= 0.50 && dThumbIndex <= 1.35 && dThumbMiddle >= 0.45 && dWristMiddle > 0.90 && dWristMiddle < 1.70;
+  scores['C'] = isCArch ? 0.96 : 0.02;
 
-  // 'D': Index extended; Thumb touching Middle & Ring tips
-  scores['D'] = (indexExt && !middleExt && !ringExt && !pinkyExt && dThumbMiddle < 0.45 && dThumbRing < 0.45) ? 0.97 : 0.02;
+  // 'D': Index extended straight up; Thumb tip touching Middle & Ring tips upper near palm center
+  scores['D'] = (indexExt && dThumbMiddle < 0.45 && dThumbRing < 0.45 && lm[4].y < lm[10].y) ? 0.99 : 0.02;
 
   // 'E': All 4 fingers tightly folded flat against palm; Thumb tucked across lower fingertips
   const eFoldScore = smoothstepDown(0.66, 0.54, dWristMiddle);
-  scores['E'] = (indexCurled && middleCurled && ringCurled && pinkyCurled && (lm[4].y > lm[7].y || eFoldScore > 0.5) && nDist(4, 10) < 0.45) ? 0.95 : 0.04;
+  scores['E'] = (indexCurled && middleCurled && ringCurled && pinkyCurled && (lm[4].y > lm[7].y || eFoldScore > 0.5) && nDist(4, 10) < 0.45 && dWristMiddle < 0.85 && lm[4].x < lm[6].x) ? 0.95 : 0.04;
 
   // 'F': Index tip touching Thumb tip forming an 'O' loop; Middle, Ring, Pinky extended straight up
   scores['F'] = (dThumbIndex < 0.30 && middleExt && ringExt && pinkyExt) ? 0.98 : 0.02;
@@ -187,34 +187,21 @@ export function classifyASLGeometry(rawLandmarks, handedness = 'Right') {
   // 'K': Index extended up, Middle extended forward, Thumb tip resting between them
   scores['K'] = (indexExt && middleExt && !ringExt && !pinkyExt && dThumbMiddle < 0.40 && dIndexMiddle > 0.30) ? 0.95 : 0.03;
 
-  // 'L': Thumb + Index extended; Middle, Ring, Pinky curled
-  scores['L'] = (indexExt && thumbExt && !middleExt && !ringExt && !pinkyExt && dThumbIndex > 0.65) ? 0.99 : 0.01;
+  // 'L': Thumb + Index extended wide; Middle, Ring, Pinky curled
+  scores['L'] = (indexExt && thumbExt && !middleExt && !ringExt && !pinkyExt && dThumbIndex > 0.65 && lm[4].x < lm[2].x - 0.03) ? 0.99 : 0.01;
 
-  // 'M': 3 fingers (Index, Middle, Ring) draped over tucked Thumb; Pinky curled
-  scores['M'] = (indexCurled && middleCurled && ringCurled && pinkyCurled && nDist(4, 16) < 0.38) ? 0.94 : 0.03;
+  // 'M': 3 fingers (Index, Middle, Ring) draped over tucked Thumb; Thumb tip reaches at or past Ring MCP / Middle MCP (LM 9)
+  scores['M'] = (indexCurled && middleCurled && ringCurled && pinkyCurled && dWristMiddle < 0.85 && lm[4].y <= lm[8].y && lm[4].y > lm[6].y + 0.03 && lm[4].x >= lm[9].x + 0.005) ? 0.985 : 0.03;
 
-  // 'N': 2 fingers (Index, Middle) draped over tucked Thumb; Ring & Pinky curled
-  scores['N'] = (indexCurled && middleCurled && ringCurled && pinkyCurled && nDist(4, 12) < 0.38 && nDist(4, 16) > 0.38) ? 0.94 : 0.03;
+  // 'N': 2 fingers (Index, Middle) draped over tucked Thumb; Thumb tip rests between Index and Middle MCP (LM 5 and LM 9)
+  scores['N'] = (indexCurled && middleCurled && ringCurled && pinkyCurled && dWristMiddle < 0.85 && lm[4].y <= lm[8].y && lm[4].y > lm[6].y + 0.03 && lm[4].x < lm[9].x + 0.005) ? 0.985 : 0.03;
 
-  // 'O': Rounded loop where Index, Middle, and Ring fingertips touch/converge at Thumb tip.
-  // Requires:
-  // 1. Proximity between Thumb tip and Index/Middle/Ring tips
-  // 2. Open loop arch volume (fingertips project out from wrist, not folded flat as in 'E' fist)
-  // 3. Fingers non-extended (curved downward into the loop)
-  const oPinchScore = smoothstepDown(0.40, 0.20, dThumbIndex) * 0.45 +
-                      smoothstepDown(0.42, 0.22, dThumbMiddle) * 0.35 +
-                      smoothstepDown(0.46, 0.25, dThumbRing) * 0.20;
-  const oArchScore = smoothstep(0.62, 0.74, dWristMiddle); // Rejects flat 'E' fist fold
-  const oNonExtFactor = (!indexExt && !middleExt && !ringExt) ? 1.0 : 0.20;
+  // 'O': Rounded closed loop where Index, Middle, and Ring fingertips touch/converge at Thumb tip
+  const isOLoop = !isBPalm && dThumbIndex < 0.70 && dThumbMiddle < 0.70 && dWristMiddle >= 0.90 && dWristMiddle <= 1.45;
+  scores['O'] = isOLoop ? 0.98 : 0.02;
 
-  if (dThumbIndex < 0.40 && dThumbMiddle < 0.42 && oArchScore > 0.1 && oNonExtFactor > 0.5) {
-    scores['O'] = 0.97 * (0.6 * oPinchScore + 0.4 * oArchScore);
-  } else {
-    scores['O'] = 0.02;
-  }
-
-  // 'P': Pointing down K shape
-  scores['P'] = (!ringExt && !pinkyExt && lm[8].y > lm[5].y && lm[12].y > lm[9].y && dThumbMiddle < 0.45) ? 0.93 : 0.02;
+  // 'P': Pointing down K shape (Index extended forward/down nDist(8, 5) > 0.50, NOT curled fist)
+  scores['P'] = (!indexCurled && !ringExt && !pinkyExt && nDist(8, 5) > 0.50 && lm[8].y > lm[5].y && lm[12].y > lm[9].y && dThumbMiddle < 0.45) ? 0.93 : 0.02;
 
   // 'Q': Pointing down G shape
   scores['Q'] = (!middleExt && !ringExt && !pinkyExt && lm[8].y > lm[5].y && lm[4].y > lm[2].y) ? 0.92 : 0.02;
@@ -243,8 +230,8 @@ export function classifyASLGeometry(rawLandmarks, handedness = 'Right') {
   // 'Y': Thumb + Pinky extended
   scores['Y'] = (thumbExt && pinkyExt && !indexExt && !middleExt && !ringExt && dThumbPinky > 1.10) ? 0.99 : 0.01;
 
-  // 'Z': Index extended up/forward for Z tracing
-  scores['Z'] = (indexExt && !middleExt && !ringExt && !pinkyExt && dIndexMiddle > 0.45 && !thumbExt) ? 0.93 : 0.02;
+  // 'Z': Index extended up/forward for Z gesture pose
+  scores['Z'] = (indexExt && !middleExt && !ringExt && !pinkyExt && dIndexMiddle > 0.45) ? 0.98 : 0.02;
 
   // 4. Sort Class Probabilities Descending
   const sortedPairs = Object.entries(scores).sort((a, b) => b[1] - a[1]);
@@ -252,7 +239,6 @@ export function classifyASLGeometry(rawLandmarks, handedness = 'Right') {
   const runnerUpScore = sortedPairs[1] ? sortedPairs[1][1] : 0.0;
 
   // Compute Ambiguity-Adjusted Confidence
-  // If margin between top score and runner-up is narrow, confidence is scaled dynamically
   const margin = topRawScore - runnerUpScore;
   const ambiguityFactor = smoothstep(0.05, 0.30, margin);
   const finalConfidence = Math.max(0.10, topRawScore * (0.85 + 0.15 * ambiguityFactor));
@@ -271,4 +257,54 @@ export function classifyASLGeometry(rawLandmarks, handedness = 'Right') {
     top_probabilities: topProbabilities,
     processing_time_ms: elapsedMs
   };
+}
+
+/**
+ * Temporal Z Trajectory Tracker to recognize dynamic Z-tracing motion across frames.
+ */
+export class ZTrajectoryTracker {
+  constructor(windowSize = 20) {
+    this.windowSize = windowSize;
+    this.history = [];
+  }
+
+  addFrame(landmarks) {
+    if (!landmarks || landmarks.length !== 21) {
+      this.history = [];
+      return false;
+    }
+    const indexTip = landmarks[8];
+    this.history.push({ x: indexTip.x, y: indexTip.y, t: Date.now() });
+    if (this.history.length > this.windowSize) {
+      this.history.shift();
+    }
+    return this.detectZ();
+  }
+
+  detectZ() {
+    if (this.history.length < 8) return false;
+
+    let directionSwitches = 0;
+    let lastDx = 0;
+    let totalDist = 0;
+
+    for (let i = 1; i < this.history.length; i++) {
+      const dx = this.history[i].x - this.history[i - 1].x;
+      const dy = this.history[i].y - this.history[i - 1].y;
+      totalDist += Math.sqrt(dx * dx + dy * dy);
+
+      if (Math.abs(dx) > 0.015) {
+        if (lastDx !== 0 && Math.sign(dx) !== Math.sign(lastDx)) {
+          directionSwitches++;
+        }
+        lastDx = dx;
+      }
+    }
+
+    return directionSwitches >= 2 && totalDist > 0.12;
+  }
+
+  reset() {
+    this.history = [];
+  }
 }
